@@ -47,6 +47,7 @@
 extern volatile bool recording_paused;
 
 class ColorSelect;
+class DReXMultiCanvasPreview;
 class OBSAbout;
 class OBSBasicAdvAudio;
 class OBSBasicFilters;
@@ -62,6 +63,8 @@ class VolumeControl;
 class YouTubeAppDock;
 #endif
 class QMessageBox;
+class QComboBox;
+class QListWidget;
 class QWidgetAction;
 struct QuickTransition;
 
@@ -1144,9 +1147,24 @@ public:
 	 */
 private:
 	std::vector<OBS::Canvas> canvases;
+	QPointer<DReXMultiCanvasPreview> drexMultiCanvasPreview;
+	QPointer<QWidget> drexMediaControls;
+	QPointer<OBSDock> drexCanvasDock;
+	QPointer<QListWidget> drexCanvasList;
+	QPointer<QComboBox> drexCanvasSelector;
+	size_t drexVisibleCanvasCount = 0;
+	OBSWeakSource drexMainCanvasScene;
+	OBSScene drexEditingScene;
+	std::vector<OBSWeakSource> drexRegisteredScenes;
+	std::vector<std::shared_ptr<OBSSignal>> drexCanvasSignals;
+	enum class DReXMediaAction { Restart, Play, Pause, Stop };
 
 	static void CanvasRemoved(void *data, calldata_t *params);
 	void ClearCanvases();
+	void SetDReXMultiCanvasCount(size_t count);
+	void SelectDReXCanvas(size_t index);
+	void RegisterDReXCanvasScene(obs_source_t *source);
+	void ControlDReXCanvasMedia(DReXMediaAction action);
 
 public:
 	const std::vector<OBS::Canvas> &GetCanvases() const noexcept { return canvases; }

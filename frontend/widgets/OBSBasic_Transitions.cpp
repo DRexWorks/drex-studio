@@ -689,7 +689,13 @@ void OBSBasic::SetCurrentScene(obs_scene_t *scene, bool force)
 
 void OBSBasic::SetCurrentScene(OBSSource scene, bool force)
 {
-	if (!IsPreviewProgramMode()) {
+	OBSCanvasAutoRelease sceneCanvas = scene ? obs_source_get_canvas(scene) : nullptr;
+	OBSCanvasAutoRelease mainCanvas = obs_get_main_canvas();
+	const bool additionalCanvasScene = sceneCanvas && sceneCanvas != mainCanvas;
+
+	if (additionalCanvasScene) {
+		obs_canvas_set_channel(sceneCanvas, 0, scene);
+	} else if (!IsPreviewProgramMode()) {
 		TransitionToScene(scene, force);
 	} else {
 		OBSSource actualLastScene = OBSGetStrongRef(lastScene);

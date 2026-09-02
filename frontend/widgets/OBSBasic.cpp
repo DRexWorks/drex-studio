@@ -45,6 +45,7 @@
 #include <utility/WhatsNewInfoThread.hpp>
 #endif
 #include <widgets/AudioMixer.hpp>
+#include <widgets/DReXMultiCanvasPreview.hpp>
 #include <widgets/OBSProjector.hpp>
 
 #include <OBSStudioAPI.hpp>
@@ -57,6 +58,10 @@
 #include <qt-wrappers.hpp>
 
 #include <QActionGroup>
+#include <QComboBox>
+#include <QHBoxLayout>
+#include <QListWidget>
+#include <QPushButton>
 #include <QThread>
 #include <QWidgetAction>
 
@@ -256,6 +261,57 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	ui->setupUi(this);
 	ui->previewDisabledWidget->setVisible(false);
 
+	drexMultiCanvasPreview = new DReXMultiCanvasPreview(ui->canvasEditor);
+	ui->previewLayout->addWidget(drexMultiCanvasPreview);
+	drexMultiCanvasPreview->setVisible(false);
+
+	drexMediaControls = new QWidget(ui->contextContainer);
+	QHBoxLayout *drexMediaLayout = new QHBoxLayout(drexMediaControls);
+	drexMediaLayout->setContentsMargins(0, 0, 0, 0);
+	drexMediaLayout->setSpacing(4);
+	drexCanvasSelector = new QComboBox(drexMediaControls);
+	drexCanvasSelector->setMinimumWidth(130);
+	drexCanvasSelector->setToolTip(QStringLiteral("Canvas currently shown in the Sources panel"));
+	drexMediaLayout->addWidget(drexCanvasSelector);
+	connect(drexCanvasSelector, &QComboBox::activated, this, [this](int index) {
+		if (index >= 0) {
+			SelectDReXCanvas(size_t(index));
+		}
+	});
+	auto addMediaButton = [this, drexMediaLayout](const QString &label, DReXMediaAction action) {
+		QPushButton *button = new QPushButton(label, drexMediaControls);
+		drexMediaLayout->addWidget(button);
+		connect(button, &QPushButton::clicked, this, [this, action]() { ControlDReXCanvasMedia(action); });
+	};
+	addMediaButton(QStringLiteral("Restart All"), DReXMediaAction::Restart);
+	addMediaButton(QStringLiteral("Play All"), DReXMediaAction::Play);
+	addMediaButton(QStringLiteral("Pause All"), DReXMediaAction::Pause);
+	addMediaButton(QStringLiteral("Stop All"), DReXMediaAction::Stop);
+	ui->horizontalLayout9->addWidget(drexMediaControls);
+	drexMediaControls->setVisible(false);
+
+	QMenu *drexMultiCanvasMenu = ui->viewMenu->addMenu(QStringLiteral("Multi-Canvas (Experimental)"));
+	QActionGroup *drexMultiCanvasActions = new QActionGroup(drexMultiCanvasMenu);
+	drexMultiCanvasActions->setExclusive(true);
+
+	auto addMultiCanvasAction = [this, drexMultiCanvasMenu,
+				     drexMultiCanvasActions](const QString &label, size_t count, bool checked = false) {
+		QAction *action = drexMultiCanvasMenu->addAction(label);
+		action->setCheckable(true);
+		action->setChecked(checked);
+		drexMultiCanvasActions->addAction(action);
+		connect(action, &QAction::triggered, this, [this, count]() { SetDReXMultiCanvasCount(count); });
+	};
+
+	addMultiCanvasAction(QStringLiteral("Off"), 0, true);
+	drexMultiCanvasMenu->addSeparator();
+	addMultiCanvasAction(QStringLiteral("2 Canvases"), 2);
+	addMultiCanvasAction(QStringLiteral("4 Canvases"), 4);
+	addMultiCanvasAction(QStringLiteral("8 Canvases"), 8);
+	addMultiCanvasAction(QStringLiteral("10 Canvases"), 10);
+
+	connect(drexMultiCanvasPreview, &DReXMultiCanvasPreview::CanvasSelected, this, &OBSBasic::SelectDReXCanvas);
+
 	/* Set up streaming connections */
 	connect(
 		this, &OBSBasic::StreamingStarting, this, [this] { this->streamingStarting = true; },
@@ -296,6 +352,23 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	controlsDock->setWindowTitle(QTStr("Basic.Main.Controls"));
 	/* Parenting is done there so controls will be deleted alongside controlsDock */
 	controlsDock->setWidget(controls);
+
+	drexCanvasList = new QListWidget();
+	drexCanvasList->setSelectionMode(QAbstractItemView::SingleSelection);
+	drexCanvasDock = new OBSDock(this);
+	drexCanvasDock->setObjectName(QStringLiteral("drexCanvasDock"));
+	drexCanvasDock->setWindowTitle(QStringLiteral("Canvases"));
+	drexCanvasDock->setWidget(drexCanvasList);
+	drexCanvasDock->setVisible(false);
+	connect(drexCanvasList, &QListWidget::currentRowChanged, this, [this](int row) {
+		if (row >= 0) {
+			SelectDReXCanvas(size_t(row));
+		}
+	});
+	connect(drexCanvasList, &QListWidget::itemClicked, this,
+		[this](QListWidgetItem *item) { SelectDReXCanvas(size_t(drexCanvasList->row(item))); });
+	connect(drexCanvasList, &QListWidget::itemPressed, this,
+		[this](QListWidgetItem *item) { SelectDReXCanvas(size_t(drexCanvasList->row(item))); });
 
 	connect(controls, &OBSBasicControls::StreamButtonClicked, this, &OBSBasic::StreamActionTriggered);
 
@@ -358,7 +431,9 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	/* Scenes and Sources dock on left
 	 * This specific arrangement can't be set up in Qt Designer */
 	addDockWidget(Qt::LeftDockWidgetArea, ui->scenesDock);
-	splitDockWidget(ui->scenesDock, ui->sourcesDock, Qt::Vertical);
+	addDockWidget(Qt::LeftDockWidgetArea, drexCanvasDock);
+	splitDockWidget(ui->scenesDock, drexCanvasDock, Qt::Vertical);
+	splitDockWidget(drexCanvasDock, ui->sourcesDock, Qt::Vertical);
 	int sideDockWidth = std::min(width() * 30 / 100, 320);
 	resizeDocks({ui->scenesDock, ui->sourcesDock}, {sideDockWidth, sideDockWidth}, Qt::Horizontal);
 	addDockWidget(Qt::BottomDockWidgetArea, controlsDock);

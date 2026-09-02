@@ -99,6 +99,9 @@ void OBSBasic::LoadSceneListOrder(obs_data_array_t *array)
 
 OBSScene OBSBasic::GetCurrentScene()
 {
+	if (drexVisibleCanvasCount && drexEditingScene) {
+		return drexEditingScene;
+	}
 	return currentScene.load();
 }
 

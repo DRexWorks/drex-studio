@@ -20,6 +20,7 @@
 #include "OBSBasic.hpp"
 
 #include <utility/display-helpers.hpp>
+#include <widgets/DReXMultiCanvasPreview.hpp>
 #include <widgets/OBSProjector.hpp>
 
 #include <qt-wrappers.hpp>
@@ -262,6 +263,16 @@ void OBSBasic::on_previewDisabledWidget_customContextMenuRequested()
 
 void OBSBasic::EnablePreviewDisplay(bool enable)
 {
+	if (drexVisibleCanvasCount && drexMultiCanvasPreview) {
+		if (obs_display_t *display = drexMultiCanvasPreview->GetDisplay()) {
+			obs_display_set_enabled(display, enable);
+		}
+		drexMultiCanvasPreview->setVisible(true);
+		ui->previewContainer->setVisible(false);
+		ui->previewDisabledWidget->setVisible(false);
+		return;
+	}
+
 	obs_display_set_enabled(ui->preview->GetDisplay(), enable);
 	ui->previewContainer->setVisible(enable);
 	ui->previewDisabledWidget->setVisible(!enable);
